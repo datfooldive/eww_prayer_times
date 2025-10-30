@@ -1,5 +1,6 @@
-use chrono::{Datelike, Local, TimeZone};
+use chrono::{DateTime, Datelike, Local, NaiveTime, TimeZone};
 use clap::Parser;
+use notify_rust::Notification;
 use rust_embed::RustEmbed;
 use salah::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -31,6 +32,9 @@ struct Cli {
 
     #[clap(long)]
     coordinate: Option<String>,
+
+    #[clap(long, hide = true)]
+    test_at: Option<String>,
 }
 
 #[derive(RustEmbed)]
@@ -56,8 +60,7 @@ where
     match value {
         serde_json::Value::String(s) => s.parse().map_err(D::Error::custom),
         serde_json::Value::Number(n) => {
-            n.as_f64()
-                .ok_or_else(|| D::Error::custom("Invalid number"))
+            n.as_f64().ok_or_else(|| D::Error::custom("Invalid number"))
         }
         _ => Err(D::Error::custom("Expected string or number")),
     }
@@ -109,10 +112,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("Please provide either --city or --coordinate".into());
     };
 
-    // Main loop to run continuously as a daemon for eww's `deflisten`.
+    // Determine if we are in test mode and get the fake "now".
+    let test_now: Option<DateTime<Local>> = if let Some(test_at_str) = &cli.test_at {
+        // The format is now just "HH:MM"
+        let time = NaiveTime::parse_from_str(test_at_str, "%H:%M")?;
+        let today = Local::now().date_naive();
+        let naive_dt = today.and_time(time);
+        Some(
+            Local
+                .from_local_datetime(&naive_dt)
+                .single()
+                .ok_or("Ambiguous or invalid time provided for --test-at")?,
+        )
+    } else {
+        None
+    };
+
+    // Main loop to run continuously as a daemon, or once if in test mode.
     loop {
         // --- Calculate Prayer Times ---
-        let now = Local::now();
+        // Use the fake time if in test mode, otherwise use the real current time.
+        let now = test_now.unwrap_or_else(Local::now);
         let local_date = now.date_naive();
         let configuration = Configuration::with(Method::Singapore, Madhab::Shafi);
         let prayers = PrayerSchedule::new()
@@ -136,47 +156,70 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             (Prayer::Isha, isha_time),
         ];
 
-        // Find the first prayer time that is in the future.
         let next_prayer_info = prayer_times.iter().find(|(_, time)| *time > now);
 
-        // If a next prayer is found, use its name. Otherwise, default to Fajr (for the next day).
-        let next_prayer_name = next_prayer_info
+        // --- Output JSON to Stdout for eww ---
+        let next_prayer_name_for_json = next_prayer_info
             .map(|(prayer, _)| format!("{:?}", prayer))
             .unwrap_or_else(|| "Fajr".to_string());
 
-        // --- Output JSON to Stdout ---
         let output_struct = PrayerOutput {
             fajr: fajr_time.format("%H:%M").to_string(),
             dhuhr: dhuhr_time.format("%H:%M").to_string(),
             asr: asr_time.format("%H:%M").to_string(),
             maghrib: maghrib_time.format("%H:%M").to_string(),
             isha: isha_time.format("%H:%M").to_string(),
-            next: next_prayer_name,
+            next: next_prayer_name_for_json,
         };
 
-        // Serialize directly to stdout to be efficient.
-        // A lock on stdout is used and released immediately after the write.
         {
             let stdout = io::stdout();
             let mut handle = stdout.lock();
             serde_json::to_writer(&mut handle, &output_struct)?;
-            writeln!(&mut handle)?; // `deflisten` expects newline-separated JSON.
+            writeln!(&mut handle)?;
         }
 
-        // --- Sleep Until Next Event ---
-        // Calculate how long to sleep.
-        let sleep_duration = if let Some((_, next_time)) = next_prayer_info {
-            // If there's an upcoming prayer today, sleep until just after it has passed.
-            (*next_time - now).to_std()? + Duration::from_secs(1)
+        // --- Sleep Until Next Prayer and Notify ---
+        if let Some((prayer, time)) = next_prayer_info {
+            let sleep_duration = (*time - now).to_std().unwrap_or(Duration::from_secs(0));
+
+            if test_now.is_some() {
+                eprintln!(
+                    "[TEST MODE] Sleeping for {:?} until {:?}.",
+                    sleep_duration, prayer
+                );
+            }
+
+            thread::sleep(sleep_duration);
+
+            let prayer_name_str = format!("{:?}", prayer);
+            let summary = format!("Waktu Sholat {}", prayer_name_str);
+            let body = format!("Saatnya menunaikan sholat {}", prayer_name_str);
+            Notification::new().summary(&summary).body(&body).show()?;
+
+            thread::sleep(Duration::from_secs(1));
         } else {
-            // If all prayers for today are done, sleep until just after midnight.
             let tomorrow = local_date.succ_opt().unwrap();
             let midnight_local = Local
                 .with_ymd_and_hms(tomorrow.year(), tomorrow.month(), tomorrow.day(), 0, 0, 1)
                 .unwrap();
-            (midnight_local - now).to_std()?
-        };
+            let sleep_duration = (midnight_local - now).to_std()?;
 
-        thread::sleep(sleep_duration);
+            if test_now.is_some() {
+                eprintln!(
+                    "[TEST MODE] No more prayers today. Sleeping for {:?}.",
+                    sleep_duration
+                );
+            }
+
+            thread::sleep(sleep_duration);
+        }
+
+        // If we were in test mode, exit the loop after one run.
+        if test_now.is_some() {
+            break;
+        }
     }
+
+    Ok(())
 }
