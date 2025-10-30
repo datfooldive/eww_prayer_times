@@ -1,0 +1,25 @@
+.prayers {
+  color: rgba(250, 250, 250, 0.7);
+  font-size: 24px;
+  &.background {
+    background: none;
+  }
+  .prayers-widget {
+    background: rgba(250, 250, 250, 0.1);
+    border-radius: 12px;
+    padding: 5px;
+  }
+  .players-title {
+    font-size: 20px;
+  }
+  .prayers-text {
+    background: rgba(250, 250, 250, 0.1);
+    padding: 5px;
+    border-radius: 12px;
+
+    &.next-prayer {
+      background: rgba(200, 200, 200, 0.8);
+      color: rgba(0, 0, 0, 0.8);
+    }
+  }
+}
