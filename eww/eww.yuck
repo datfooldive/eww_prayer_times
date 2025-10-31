@@ -12,7 +12,6 @@
 		:halign "center"
 		:valign "center"
 		:class "prayers-widget"
-		(label :text "Jangan lupa ke Masjid" :halign "center" :class "prayers-title")
 		(prayer-line :name "Subuh  " :time "${prayers-time.Fajr}" :is-next {prayers-time.next == "Fajr"})
 		(prayer-line :name "Dzuhur " :time "${prayers-time.Dhuhr}" :is-next {prayers-time.next == "Dhuhr"})
 		(prayer-line :name "Ashar  " :time "${prayers-time.Asr}" :is-next {prayers-time.next == "Asr"})
@@ -25,5 +24,5 @@
 	:monitor 0
 	:stacking "bg"
 	:focusable false
-	:geometry (geometry :x "60px" :y "32px" :width "300px" :height "240px" :anchor "top left")
+	:geometry (geometry :y "32px" :width "260px" :height "240px" :anchor "bottom left")
 	(prayers))

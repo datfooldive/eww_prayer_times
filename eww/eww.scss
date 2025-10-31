@@ -1,25 +1,28 @@
 .prayers {
-  color: rgba(250, 250, 250, 0.7);
-  font-size: 24px;
+  color: $color-text-light;
+  font-size: 18px;
+
   &.background {
-    background: none;
+    @extend %no-background;
   }
+
   .prayers-widget {
-    background: rgba(250, 250, 250, 0.1);
-    border-radius: 12px;
+    background: $color-bg-light;
+    border-radius: $border-radius;
     padding: 5px;
   }
-  .players-title {
-    font-size: 20px;
-  }
+
   .prayers-text {
-    background: rgba(250, 250, 250, 0.1);
-    padding: 5px;
-    border-radius: 12px;
+    background: rgba(200, 200, 200, 0.1);
+    border: 1px solid $color-bg-light;
+    margin: 3px;
+    padding: 6px;
+    border-radius: $border-radius;
 
     &.next-prayer {
+      border-color: rgba($color-black, 0.5);
       background: rgba(200, 200, 200, 0.8);
-      color: rgba(0, 0, 0, 0.8);
+      color: rgba($color-black, 0.8);
     }
   }
 }
